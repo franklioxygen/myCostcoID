@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+    <head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1" />
+	<title>Costo Digital Membership Card generator</title>
+	<!-- Set the Android status bar color to the same color as the Costco app -->
+	<meta name="theme-color" content="#2a6495" />
+	<!-- When "Adding to Home Screen", Android will open the page in fullscreen mode -->
+	<meta name="mobile-web-app-capable" content="yes">
+	<style>
+body {
+    margin: 0;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+img {
+    display: block;
+    width: 100%;
+}
+svg {
+    display: block;
+    position: relative;
+    width: 34%;
+    margin-top: -76%;
+    margin-left: auto;
+    margin-right: auto;
+}
+	</style>
+	<script src="http://blog.zorinaq.com/assets/costco_cardgen/qrcodegen.js"></script>
+	<script src="http://blog.zorinaq.com/assets/costco_cardgen/sha256.js"></script>
+    </head>
+    <body>
+	<img src="template_card.png"></img>
+	<div id="q0" onclick='change_mask()'></div>
+	<script>
+
+function parse(s) {
+    var ret = {};
+    var pairs = (s[0] === '#' ? s.substr(1) : s).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+	var pair = pairs[i].split('=');
+	ret[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return ret;
+}
+
+function pad(n, l) {
+    n = String(n);
+    while (n.length < l) { n = "0" + n; }
+    return n;
+}
+
+function generate_token() {
+    var salt = "SCOTTJOHN";
+    var time = Math.floor((new Date()).getTime() / 300000);
+    console.log("android_id=" + vars['android_id'] + " salt=" + salt + " time=" + time);
+    var token = sha256(vars['android_id'] + salt + time);
+    token = token.substr(0, 6);
+    token = pad(parseInt(token, 16), 8);
+    console.log("token=" + token);
+    return token;
+}
+
+function build_qr_data() {
+    const APPLICATION_IDENTIFIER = "96";
+    const SUB_TYPE = "000";
+    const RESERVED_FOR_FUTURE = "00";
+    const DIGITAL_TOKEN_VERSION = "01";
+    const qr_data =
+	APPLICATION_IDENTIFIER +
+	SUB_TYPE +
+	pad(vars['membership'], 13) +
+	RESERVED_FOR_FUTURE +
+	DIGITAL_TOKEN_VERSION +
+	generate_token();
+    console.log("QR Data=" + qr_data);
+    return qr_data;
+}
+
+function draw_qr(mask) {
+    var text = build_qr_data();
+    var ecl = qrcodegen.QrCode.Ecc.LOW;
+    var segs = qrcodegen.QrSegment.makeSegments(text);
+    var minVer = 1;
+    var maxVer = 40;
+    var boostEcc = false;
+    var qr = qrcodegen.QrCode.encodeSegments(segs, ecl, minVer, maxVer, mask, boostEcc);
+    var border = 0;
+    document.getElementById('q0').innerHTML = qr.toSvgString(border);
+    var stats = "QR Code version=" + qr.version + ", ";
+    stats += "mask pattern=" + qr.mask + ", ";
+    stats += "character count=" + text.length + ", ";
+    stats += "error correction=level " + "LMQH".charAt(qr.errorCorrectionLevel.ordinal) + ", ";
+    stats += "data bits=" + qrcodegen.QrSegment.getTotalBits(segs, qr.version) + ".";
+    console.log(stats);
+    return qr.mask;
+}
+
+function change_mask() {
+    // The Costco app and the qrcodegen.js library used on this page often
+    // choose the same QR mask pattern, resulting in perfectly identical QR
+    // code. When they don't, we want to provide end-users a quick way to cycle
+    // through the patterns so they can at least quickly visually confirm
+    // it encodes the same data.
+    draw_qr(mask = (mask + 1) % 8);
+}
+
+var vars = parse(window.location.hash);
+const queryString = window.location.search;
+const urlParams = new URLSearchParams(queryString);
+vars.android_id = urlParams.get('device_id');
+vars.membership = urlParams.get('member_id');
+console.log(vars.android_id, vars.membership);
+if (!('android_id' in vars) || !('membership' in vars)) {
+    window.location.hash =
+	'#android_id=' + prompt('Enter android_id:') +
+	'&membership=' + prompt('Enter membership:');
+    vars = parse(window.location.hash);
+}
+var mask = draw_qr(-1);
+
+	</script>
+    </body>
+</html>
